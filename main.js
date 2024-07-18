@@ -6,27 +6,16 @@ import * as Helpers from './helpers'
 
 document.querySelector('#app').innerHTML = /*html*/ `
     <div id="game"></div>
-    <button id="btn">Click me</button>
 `
 
-const SCALE = 30
+const SCALE = 100
 const border = 10
 
 const windowSizeX = 800
 const windowSizeY = 600
 
-let world,
-  app,
-  ballBodyDesc,
-  leftWallCollider,
-  bottomWallCollider,
-  rightWallCollider,
-  topWallCollider,
-  ballCollider,
-  ballBody,
-  collider
+let world, app
 
-const firstBall = new Graphics()
 let leftWall = new Graphics()
 const gameEl = document.querySelector('#game')
 
@@ -36,23 +25,19 @@ let WALLS_GRAPHICS = []
 
 // function update() {}
 function animate(t = 0) {
-  // console.log(t)
-  // positionX = positionX + speedX;
-  // if (positionX > maxXPosition || positionX < 0) {
-  //   speedX = speedX * (-1);
-  // }
-  // rect.style.left = positionX + 'px';
-  // Engine.update(engine, 1000 / 60)
-  // renderDebug(app.stage, world)
-  // console.log('debug graphics', GRAPHICS)
+  // console.log(t.elapsedMS)
   world.step()
 
-  let position = ballBody.translation()
-  // console.log(firstBall.position)
-  // console.log('Rigid-body position: ', position.x, position.y)
-  firstBall.x = position.x
-  firstBall.y = position.y * -1
-  window.requestAnimationFrame(animate)
+  GRAPHICS.forEach((graphic) => {
+    let position = graphic.body.translation()
+
+    // console.log('graphic position', position)
+
+    graphic.x = position.x
+    graphic.y = -position.y
+  })
+
+  // window.requestAnimationFrame(animate)
 }
 
 async function init() {
@@ -64,44 +49,35 @@ async function init() {
     height: 600,
     // transparent: true,
     backgroundColor: 0xd0d2d6,
-    resolution: 2, // Increase this value for higher resolution
+    // resolution: 2, // Increase this value for higher resolution
     autoDensity: true,
+    antialias: true,
   })
 
   gameEl.appendChild(app.canvas)
   console.log(app.canvas.width, app.canvas.height)
   //PHYSICS CREATION
-  let gravity = { x: 0.0, y: -1 }
+  let gravity = { x: 0.0, y: -9.81 }
   // let gravity = { x: 0.0, y: -2 }
   world = new RAPIER.World(gravity)
 
-  // Create walls
-  await initWalls()
-
-  // console.log(groundColliderDesc.rotation)
-
-  // Create physics ball.
-  ballBodyDesc = RAPIER.RigidBodyDesc.dynamic().setTranslation(200, -150)
-  ballCollider = RAPIER.ColliderDesc.ball(50).setRestitution(0.7)
-  // .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Min)
-
-  ballBody = world.createRigidBody(ballBodyDesc)
-  collider = world.createCollider(ballCollider, ballBody)
-
-  //GRAPHICS CREATION
-  //create ball graphics
-  const ballPosition = ballBody.translation()
-
-  firstBall.circle(
-    ballPosition.x,
-    ballPosition.y * -1,
-    ballCollider.shape.radius
-  )
+  //Create Ball
+  const firstBall = new Graphics()
+  firstBall.circle(50, 50, 50)
   firstBall.fill(0xde3249)
   firstBall.stroke({ width: 0, color: 0xffbd01, alpha: 0 })
-
   app.stage.addChild(firstBall)
-
+  createPhysics(firstBall, 'circle')
+  // Create Ground
+  const ground = new Graphics()
+  ground.rect(0, 0, windowSizeX, border)
+  ground.fill(0xde3249)
+  ground.stroke({ width: 0, color: 0xffbd01, alpha: 0 })
+  ground.position.set(0, 300)
+  app.stage.addChild(ground)
+  createPhysics(ground, 'rectangle', false)
+  // Create walls
+  // await initWalls()
   app.ticker.add(animate)
 }
 
@@ -131,14 +107,33 @@ function renderDebug(pixiViewport, physicsWorld) {
 }
 
 async function initWalls() {
+  let groundGraphics = new Graphics()
+  // curr.position.x = el.xLoc + 100;
+  //             curr.position.y = -el.yLoc + 100;
+  //             curr.rotation = el.rotation;
+  //             curr.pivot.set(curr.width / 2, curr.height / 2);
+  groundGraphics.rect(0, windowSizeY - 10, windowSizeX, 10)
+  groundGraphics.fill(0xde3249)
+  app.stage.addChild(groundGraphics)
+  console.log(groundGraphics)
+
   //Rapier ground block (static)
   let groundBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
-    0,
-    -windowSizeY + border
+    groundGraphics.x,
+    groundGraphics.y
   )
   let groundBody = world.createRigidBody(groundBodyDesc)
-  let groundColliderDesc = RAPIER.ColliderDesc.cuboid(windowSizeX, 10)
+
+  let groundColliderDesc = RAPIER.ColliderDesc.cuboid(
+    groundGraphics.width / 2,
+    groundGraphics.height / 2
+  )
   let groundCollider = world.createCollider(groundColliderDesc, groundBody)
+
+  groundBody.setTranslation(
+    0 + groundCollider.halfExtents().x,
+    -windowSizeY + groundCollider.halfExtents().y
+  )
 
   //Rapier left wall block (static)
   let leftWallBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(-border, 0)
@@ -163,42 +158,87 @@ async function initWalls() {
 
   WALLS_GRAPHICS.push(groundCollider, leftWallCollider, rightWallCollider)
 
-  for (let i = 0; i < WALLS_GRAPHICS.length; i++) {
-    let wallGraphics = new Graphics()
-    let wallBody = WALLS_GRAPHICS[i]
+  // for (let i = 0; i < WALLS_GRAPHICS.length; i++) {
+  //   let wallGraphics = new Graphics()
+  //   let wallBody = WALLS_GRAPHICS[i]
 
-    // let sizes = wallBody.half_extents()
+  //   // let sizes = wallBody.half_extents()
 
-    const he = wallBody.halfExtents()
-    const pos = wallBody.translation()
-    console.log(he, pos)
-    // curr.position.x = el.xLoc + 100;
-    //             curr.position.y = -el.yLoc + 100;
-    //             curr.rotation = el.rotation;
-    //             curr.pivot.set(curr.width / 2, curr.height / 2);
-    wallGraphics.rect(pos.x, pos.y, he.x, -he.y)
-    wallGraphics.pivot.set(wallGraphics.width / 2, wallGraphics.height / 2)
-    wallGraphics.fill(0xde3249)
+  //   const he = wallBody.halfExtents()
+  //   const pos = wallBody.translation()
+  //   console.log(he, pos)
+  //   // curr.position.x = el.xLoc + 100;
+  //   //             curr.position.y = -el.yLoc + 100;
+  //   //             curr.rotation = el.rotation;
+  //   //             curr.pivot.set(curr.width / 2, curr.height / 2);
+  //   wallGraphics.rect(pos.x, -pos.y, he.x * 2, he.y * 2)
+  //   wallGraphics.pivot.set(wallGraphics.width / 2, wallGraphics.height / 2)
+  //   wallGraphics.fill(0xde3249)
 
-    // Helpers.updatePosition(wallCollider, wallCollider)
-    // // wallGraphics.pivot.set(wallGraphics.width / 2, wallGraphics.height / 2)
-    // console.log(wallCollider.translation)
-    // // wallGraphics.position = {
-    // //   x: wallCollider.translation.x,
-    // //   y: -wallCollider.translation.y,
-    // // }
-    // wallGraphics.stroke({ width: 0, color: 0xffbd01, alpha: 1 })
-    // wallGraphics.fill(0xde3249)
+  //   console.log(wallGraphics)
 
-    // wallGraphics.rotation = wallCollider.rotation * -1
-    app.stage.addChild(wallGraphics)
-  }
+  //   // Helpers.updatePosition(wallCollider, wallCollider)
+  //   // // wallGraphics.pivot.set(wallGraphics.width / 2, wallGraphics.height / 2)
+  //   // console.log(wallCollider.translation)
+  //   // // wallGraphics.position = {
+  //   // //   x: wallCollider.translation.x,
+  //   // //   y: -wallCollider.translation.y,
+  //   // // }
+  //   // wallGraphics.stroke({ width: 0, color: 0xffbd01, alpha: 1 })
+  //   // wallGraphics.fill(0xde3249)
+
+  //   // wallGraphics.rotation = wallCollider.rotation * -1
+  //   app.stage.addChild(wallGraphics)
+  // }
   console.log(WALLS_GRAPHICS)
+}
+
+function createPhysics(graphic, shape, isDynamic = true) {
+  // Create physics ball.
+  // console.log(graphic)
+  let rigidBodyDesc
+  let colliderDesc
+  if (isDynamic) {
+    rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+  } else {
+    rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
+  }
+
+  switch (shape) {
+    case 'circle':
+      rigidBodyDesc.setTranslation(graphic.x, -graphic.y)
+      colliderDesc = RAPIER.ColliderDesc.ball(graphic.width)
+      break
+    case 'rectangle':
+      console.log('creating cuboid physics', graphic.x, graphic.y)
+      rigidBodyDesc.setTranslation(graphic.x, -graphic.y)
+      colliderDesc = RAPIER.ColliderDesc.cuboid(
+        graphic.width / 2,
+        graphic.height / 2
+      )
+      break
+    default:
+      rigidBodyDesc.setTranslation(
+        graphic.x + graphic.width / 2,
+        -graphic.y + graphic.height / 2
+      )
+      colliderDesc = RAPIER.ColliderDesc.cuboid(
+        graphic.width / 2,
+        graphic.height / 2
+      )
+      break
+  }
+
+  let rigidBody = world.createRigidBody(rigidBodyDesc)
+  let collider = world.createCollider(colliderDesc, rigidBody)
+
+  graphic.body = collider
+  GRAPHICS.push(graphic)
 }
 
 await init()
 // resize()
-animate(0)
+// animate(0)
 
 // import './style.css'
 // import * as PIXI from 'pixi.js'
