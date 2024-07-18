@@ -8,8 +8,7 @@ document.querySelector('#app').innerHTML = /*html*/ `
     <div id="game"></div>
 `
 
-const SCALE = 100
-const border = 10
+const border = 33
 
 const windowSizeX = 800
 const windowSizeY = 600
@@ -23,6 +22,8 @@ let GRAPHICS = []
 
 let WALLS_GRAPHICS = []
 
+const SCALE = 100
+
 // function update() {}
 function animate(t = 0) {
   // console.log(t.elapsedMS)
@@ -31,10 +32,8 @@ function animate(t = 0) {
   GRAPHICS.forEach((graphic) => {
     let position = graphic.body.translation()
 
-    // console.log('graphic position', position)
-
-    graphic.x = position.x
-    graphic.y = -position.y
+    graphic.x = position.x * SCALE
+    graphic.y = -position.y * SCALE
   })
 
   // window.requestAnimationFrame(animate)
@@ -43,7 +42,8 @@ function animate(t = 0) {
 async function init() {
   // Create a new application
   app = new Application()
-  // Initialize the application
+
+  // PIXI init
   await app.init({
     width: 800,
     height: 600,
@@ -55,30 +55,127 @@ async function init() {
   })
 
   gameEl.appendChild(app.canvas)
-  console.log(app.canvas.width, app.canvas.height)
+
   //PHYSICS CREATION
   let gravity = { x: 0.0, y: -9.81 }
-  // let gravity = { x: 0.0, y: -2 }
   world = new RAPIER.World(gravity)
 
-  //Create Ball
-  const firstBall = new Graphics()
-  firstBall.circle(50, 50, 50)
-  firstBall.fill(0xde3249)
-  firstBall.stroke({ width: 0, color: 0xffbd01, alpha: 0 })
-  app.stage.addChild(firstBall)
-  createPhysics(firstBall, 'circle')
-  // Create Ground
-  const ground = new Graphics()
-  ground.rect(0, 0, windowSizeX, border)
-  ground.fill(0xde3249)
-  ground.stroke({ width: 0, color: 0xffbd01, alpha: 0 })
-  ground.position.set(0, 300)
-  app.stage.addChild(ground)
-  createPhysics(ground, 'rectangle', false)
+  const BALL_RADIUS = 5
+  const BALL_TOTAL = 2500
+
+  for (let i = 0; i < BALL_TOTAL; i++) {
+    //Create Ball
+    const firstBall = new Graphics()
+    firstBall.pivot.set(0, 0)
+    firstBall.circle(0, 0, BALL_RADIUS)
+    firstBall.position.set(Math.random() * windowSizeX, Math.random() * 100)
+    firstBall.fill(0xde3249)
+    firstBall.stroke({ width: 0, color: 0xffbd01, alpha: 0 })
+    app.stage.addChild(firstBall)
+    createPhysics(firstBall, 'circle')
+  }
+
+  const RECT_WIDTH = 300
+  const RECT_HEIGHT = 20
+
+  // rotated platforms
+  addRectangle(260, 300, RECT_WIDTH, RECT_HEIGHT, 10, 0x332299, false)
+  addRectangle(500, 500, RECT_WIDTH, RECT_HEIGHT, -15, 0x332299, false)
+
+  const WALL_DEPTH = 20
+
+  // left wall
+  addRectangle(
+    WALL_DEPTH / 2,
+    windowSizeY / 2,
+    WALL_DEPTH,
+    windowSizeY,
+    0,
+    0x332299,
+    false
+  )
+  // right wall
+  addRectangle(
+    windowSizeX - WALL_DEPTH / 2,
+    windowSizeY / 2,
+    WALL_DEPTH,
+    windowSizeY,
+    0,
+    0x332299,
+    false
+  )
+  // bottom wall
+  addRectangle(
+    windowSizeX / 2,
+    windowSizeY - WALL_DEPTH / 2,
+    windowSizeX,
+    WALL_DEPTH,
+    0,
+    0x332299,
+    false
+  )
+
   // Create walls
   // await initWalls()
   app.ticker.add(animate)
+}
+
+function createPhysics(graphic, shape, isDynamic = true) {
+  // Create physics ball.
+  // console.log(graphic)
+  let rigidBodyDesc
+  let colliderDesc
+  if (isDynamic) {
+    rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
+  } else {
+    rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
+  }
+
+  switch (shape) {
+    case 'circle':
+      rigidBodyDesc.setTranslation(graphic.x / SCALE, -graphic.y / SCALE)
+      colliderDesc = RAPIER.ColliderDesc.ball(
+        graphic.width / 2 / SCALE
+      ).setRotation(-graphic.rotation)
+      break
+    case 'rectangle':
+    default:
+      // console.log('creating cuboid physics', graphic.x, graphic.y)
+      rigidBodyDesc.setTranslation(graphic.x / SCALE, -graphic.y / SCALE)
+      colliderDesc = RAPIER.ColliderDesc.cuboid(
+        graphic.width / 2 / SCALE,
+        graphic.height / 2 / SCALE
+      ).setRotation(-graphic.rotation)
+      break
+  }
+
+  let rigidBody = world.createRigidBody(rigidBodyDesc)
+  let collider = world.createCollider(colliderDesc, rigidBody)
+
+  graphic.body = collider
+  GRAPHICS.push(graphic)
+}
+
+function addRectangle(
+  x,
+  y,
+  width,
+  height,
+  rotation,
+  color = 0xde3249,
+  dynamic = false
+) {
+  const rectangle = new Graphics()
+
+  rectangle.pivot.set(width / 2, height / 2)
+  rectangle.rect(0, 0, width, height)
+  rectangle.fill(color)
+  rectangle.stroke({ width: 0, color: 0xffbd01, alpha: 0 })
+  rectangle.position.set(x, y)
+  rectangle.rotation = (Math.PI / 180) * rotation
+
+  app.stage.addChild(rectangle)
+  createPhysics(rectangle, 'rectangle', dynamic)
 }
 
 function renderDebug(pixiViewport, physicsWorld) {
@@ -193,75 +290,4 @@ async function initWalls() {
   console.log(WALLS_GRAPHICS)
 }
 
-function createPhysics(graphic, shape, isDynamic = true) {
-  // Create physics ball.
-  // console.log(graphic)
-  let rigidBodyDesc
-  let colliderDesc
-  if (isDynamic) {
-    rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
-  } else {
-    rigidBodyDesc = RAPIER.RigidBodyDesc.fixed()
-  }
-
-  switch (shape) {
-    case 'circle':
-      rigidBodyDesc.setTranslation(graphic.x, -graphic.y)
-      colliderDesc = RAPIER.ColliderDesc.ball(graphic.width)
-      break
-    case 'rectangle':
-      console.log('creating cuboid physics', graphic.x, graphic.y)
-      rigidBodyDesc.setTranslation(graphic.x, -graphic.y)
-      colliderDesc = RAPIER.ColliderDesc.cuboid(
-        graphic.width / 2,
-        graphic.height / 2
-      )
-      break
-    default:
-      rigidBodyDesc.setTranslation(
-        graphic.x + graphic.width / 2,
-        -graphic.y + graphic.height / 2
-      )
-      colliderDesc = RAPIER.ColliderDesc.cuboid(
-        graphic.width / 2,
-        graphic.height / 2
-      )
-      break
-  }
-
-  let rigidBody = world.createRigidBody(rigidBodyDesc)
-  let collider = world.createCollider(colliderDesc, rigidBody)
-
-  graphic.body = collider
-  GRAPHICS.push(graphic)
-}
-
 await init()
-// resize()
-// animate(0)
-
-// import './style.css'
-// import * as PIXI from 'pixi.js'
-
-// const gameEl = document.querySelector('#game')
-
-// const app = new PIXI.Application()
-// await app.init({
-//   backgroundColor: 0x1099bb,
-//   resizeTo: gameEl,
-// })
-
-// gameEl.appendChild(app?.canvas)
-
-// const graphics = new PIXI.Graphics()
-// graphics.rect(0, 0, 100, 100)
-// graphics.fill(0x000000)
-
-// app.stage.addChild(graphics)
-
-// const btnEl = document.querySelector('#btn')
-
-// btnEl?.addEventListener('click', () => {
-//   graphics.x = gameEl.clientWidth / 2 - graphics.width / 2
-//   graphics.y = gameEl.clientHeight / 2 - graphics.height / 2
-// })
